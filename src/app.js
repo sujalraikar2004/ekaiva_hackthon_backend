@@ -24,8 +24,10 @@ app.use(cookieParser())
 
 // Import routes
 import userRouter from './routes/user.routes.js'
+import meetingRouter from './routes/meeting.routes.js'
 
 // Routes declaration
 app.use("/api/v1/users", userRouter)
+app.use("/api/v1/meetings", meetingRouter)
 
 export default app

@@ -20,62 +20,137 @@ const generateAccessAndRefreshTokens = async (userId) => {
 
 // Register user
 const registerUser = asyncHandler(async (req, res) => {
-    const { username, email, password } = req.body;
+    const { 
+        username, 
+        email, 
+        password, 
+        fullName, 
+        role, 
+        department, 
+        jobTitle, 
+        employeeId, 
+        managerId, 
+        timezone 
+    } = req.body;
 
-    // Validation
-    if ([username, email, password].some(field => field?.trim() === "")) {
+    // Validation for required fields
+    const requiredFields = [username, email, password, fullName, role, department, jobTitle, employeeId];
+    if (requiredFields.some(field => field?.trim() === "")) {
         return res.status(400).json({
             success: false,
-            message: "All fields are required"
+            message: "All required fields must be provided"
         });
     }
 
-    // Check if image file is provided
-    if (!req.file) {
+    // Validate role
+    if (!["manager", "staff"].includes(role)) {
         return res.status(400).json({
             success: false,
-            message: "Profile image is required"
+            message: "Role must be either 'manager' or 'staff'"
         });
     }
 
-    // Check if user already exists
-    const existedUser = await User.findByEmailOrUsername(email);
+    // If role is staff, managerId is required
+    if (role === "staff" && !managerId) {
+        return res.status(400).json({
+            success: false,
+            message: "Manager ID is required for staff members"
+        });
+    }
+
+    // If role is staff, validate that managerId exists and is a manager
+    if (role === "staff" && managerId) {
+        const manager = await User.findById(managerId);
+        if (!manager) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid manager ID"
+            });
+        }
+        if (manager.role !== "manager") {
+            return res.status(400).json({
+                success: false,
+                message: "Assigned manager must have 'manager' role"
+            });
+        }
+    }
+
+    // Check if user already exists (email, username, or employeeId)
+    const existedUser = await User.findOne({
+        $or: [
+            { email: email.toLowerCase() },
+            { username: username.toLowerCase() },
+            { employeeId: employeeId.toUpperCase() }
+        ]
+    });
+
     if (existedUser) {
         return res.status(409).json({
             success: false,
-            message: "User with email or username already exists"
+            message: "User with this email, username, or employee ID already exists"
         });
     }
 
-    // Handle avatar upload
+    // Handle avatar upload (optional)
     let avatarUrl = null;
-    try {
-        const avatarResponse = await uploadonCloudinary(req.file.path);
-        avatarUrl = avatarResponse?.url;
-        
-        if (!avatarUrl) {
+    if (req.file) {
+        try {
+            const avatarResponse = await uploadonCloudinary(req.file.path);
+            avatarUrl = avatarResponse?.url;
+            
+            if (!avatarUrl) {
+                return res.status(500).json({
+                    success: false,
+                    message: "Failed to upload profile image"
+                });
+            }
+        } catch (error) {
             return res.status(500).json({
                 success: false,
-                message: "Failed to upload profile image"
+                message: "Profile image upload failed"
             });
         }
-    } catch (error) {
-        return res.status(500).json({
-            success: false,
-            message: "Profile image upload failed"
-        });
     }
 
-    // Create user
-    const user = await User.create({
+    // Create user object
+    const userData = {
         username: username.toLowerCase(),
         email: email.toLowerCase(),
         password,
-        avatar: avatarUrl
-    });
+        fullName: fullName.trim(),
+        role,
+        department: department.trim(),
+        jobTitle: jobTitle.trim(),
+        employeeId: employeeId.toUpperCase(),
+        timezone: timezone || 'UTC'
+    };
+
+    // Add avatar only if uploaded
+    if (avatarUrl) {
+        userData.avatar = avatarUrl;
+    }
+
+    // Add managerId only for staff
+    if (role === "staff" && managerId) {
+        userData.managerId = managerId;
+    }
+
+    // Create user
+    const user = await User.create(userData);
+
+    // If user is staff, add them to manager's team
+    if (role === "staff" && managerId) {
+        await User.findByIdAndUpdate(
+            managerId,
+            { $addToSet: { teamMembers: user._id } },
+            { new: true }
+        );
+    }
 
     // Remove password and refresh token from response
-    const createdUser = await User.findById(user._id).select("-password -refreshToken");
+    const createdUser = await User.findById(user._id)
+        .select("-password -refreshToken")
+        .populate('managerId', 'fullName email role department');
 
     if (!createdUser) {
         return res.status(500).json({
@@ -86,7 +161,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
     return res.status(201).json({
         success: true,
-        message: "User registered successfully",
+        message: `${role.charAt(0).toUpperCase() + role.slice(1)} registered successfully`,
         data: createdUser
     });
 });

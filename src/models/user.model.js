@@ -26,12 +26,46 @@ const userSchema = new mongoose.Schema({
         required: [true, "Password is required"],
         minlength: [6, "Password must be at least 6 characters long"]
     },
+    fullName: {
+        type: String,
+        required: [true, "Full name is required"],
+        trim: true,
+        minlength: [2, "Full name must be at least 2 characters long"],
+        maxlength: [50, "Full name cannot exceed 50 characters"]
+    },
+    role: {
+        type: String,
+        required: [true, "Role is required"],
+        enum: {
+            values: ["manager", "staff"],
+            message: "Role must be either 'manager' or 'staff'"
+        }
+    },
+    department: {
+        type: String,
+        required: [true, "Department is required"],
+        trim: true,
+        maxlength: [30, "Department name cannot exceed 30 characters"]
+    },
+    jobTitle: {
+        type: String,
+        required: [true, "Job title is required"],
+        trim: true,
+        maxlength: [50, "Job title cannot exceed 50 characters"]
+    },
+    employeeId: {
+        type: String,
+        required: [true, "Employee ID is required"],
+        unique: true,
+        trim: true,
+        uppercase: true
+    },
     refreshToken: {
         type: String
     },
     avatar: {
         type: String, // Cloudinary URL
-        required: [true, "Profile image is required"]
+        required: false
     },
     isActive: {
         type: Boolean,
@@ -40,6 +74,22 @@ const userSchema = new mongoose.Schema({
     lastLogin: {
         type: Date,
         default: null
+    },
+    // Meeting-specific fields
+    managerId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: function() {
+            return this.role === 'staff';
+        }
+    },
+    teamMembers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }], // Only for managers - their team members
+    timezone: {
+        type: String,
+        default: 'UTC'
     }
 }, {
     timestamps: true
@@ -69,7 +119,9 @@ userSchema.methods.generateAccessToken = function() {
         {
             _id: this._id,
             email: this.email,
-            username: this.username
+            username: this.username,
+            role: this.role,
+            department: this.department
         },
         process.env.ACCESS_TOKEN_SECRET,
         {
@@ -121,6 +173,26 @@ userSchema.statics.findByEmailOrUsername = function(identifier) {
             { username: identifier.toLowerCase() }
         ]
     });
+};
+
+// Static method to find managers
+userSchema.statics.findManagers = function() {
+    return this.find({ role: 'manager', isActive: true }).select('-password -refreshToken');
+};
+
+// Static method to find staff by manager
+userSchema.statics.findStaffByManager = function(managerId) {
+    return this.find({ 
+        role: 'staff', 
+        managerId: managerId, 
+        isActive: true 
+    }).select('-password -refreshToken');
+};
+
+// Method to check if user can manage another user
+userSchema.methods.canManage = function(userId) {
+    if (this.role !== 'manager') return false;
+    return this.teamMembers.includes(userId);
 };
 
 export const User = mongoose.model("User", userSchema);

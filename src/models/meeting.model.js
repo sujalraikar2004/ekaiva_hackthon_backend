@@ -47,6 +47,11 @@ const meetingSchema = new mongoose.Schema({
             message: "Please provide a valid meeting link"
         }
     },
+    meetingId: {
+        type: String,
+        trim: true,
+        index: true
+    },
     scheduledDateTime: {
         type: Date,
         required: [true, "Meeting date and time is required"],
@@ -126,7 +131,24 @@ const meetingSchema = new mongoose.Schema({
             type: Date,
             default: Date.now
         }
-    }]
+    }],
+    meetingTranscription: [{
+        name: {
+            type: String,
+            trim: true
+        },
+        text: {
+            type: String,
+            trim: true
+        }
+    }],
+    transcriptionBotId: {
+        type: String
+    },
+    transcriptionBotStarted: {
+        type: Boolean,
+        default: false
+    }
 }, {
     timestamps: true
 });
@@ -135,6 +157,7 @@ const meetingSchema = new mongoose.Schema({
 meetingSchema.index({ hostId: 1, scheduledDateTime: 1 });
 meetingSchema.index({ 'participants.userId': 1 });
 meetingSchema.index({ status: 1, scheduledDateTime: 1 });
+meetingSchema.index({ meetingId: 1 });
 
 // Virtual for meeting end time
 meetingSchema.virtual('scheduledEndTime').get(function() {
@@ -245,6 +268,21 @@ meetingSchema.pre('save', async function(next) {
             return next(new Error('Only managers can host meetings'));
         }
     }
+    
+    // Extract meetingId from meetingLink
+    if (this.isNew || this.isModified('meetingLink')) {
+        if (this.meetingLink) {
+            // Extract Google Meet ID from URL
+            // Examples: 
+            // https://meet.google.com/ewg-oaeu-fjk -> ewg-oaeu-fjk
+            // https://meet.google.com/lookup/ewg-oaeu-fjk -> ewg-oaeu-fjk
+            const meetIdMatch = this.meetingLink.match(/meet\.google\.com\/(?:lookup\/)?([a-z]{3}-[a-z]{4}-[a-z]{3})/);
+            if (meetIdMatch) {
+                this.meetingId = meetIdMatch[1];
+            }
+        }
+    }
+    
     next();
 });
 

@@ -8,7 +8,8 @@ import {
     startMeeting,
     endMeeting,
     getAvailableStaff,
-    updateParticipantStatus
+    updateParticipantStatus,
+    getMeetingTranscription
 } from "../controllers/meeting.controller.js";
 import { verifyJWT } from "../middleware/auth.middleware.js";
 
@@ -34,5 +35,8 @@ router.route("/:meetingId/respond").patch(updateParticipantStatus);
 
 // Staff management (for managers)
 router.route("/staff/available").get(getAvailableStaff);
+
+// Meeting transcription
+router.route("/:meetingId/transcription").get(getMeetingTranscription);
 
 export default router;

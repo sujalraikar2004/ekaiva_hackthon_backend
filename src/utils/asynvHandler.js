@@ -1,12 +1,13 @@
-const asyncHandler=(fn)=>async(req,res,next)=>{
+const asyncHandler = (fn) => async (req, res, next) => {
     try {
-        return await(fn(req,res,next));
-
+        return await fn(req, res, next);
     } catch (error) {
-        res.status(500).json({
+        console.error('AsyncHandler Error:', error);
+        res.status(error.statusCode || 500).json({
             success: false,
-            message: error.message || "Internal Server Error"
-        })
+            message: error.message || "Internal Server Error",
+            ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+        });
     }
 }
 

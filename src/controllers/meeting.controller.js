@@ -2,6 +2,7 @@ import { Meeting } from "../models/meeting.model.js";
 import { User } from "../models/user.model.js";
 import asyncHandler from "../utils/asynvHandler.js";
 import { sendMeetingInvitation, sendMeetingCancellation } from "../utils/emailService.js";
+import { startTranscriptionBot, deleteTranscriptionBot, getTranscription } from "../utils/vexaService.js";
 
 // Create a new meeting
 const createMeeting = asyncHandler(async (req, res) => {
@@ -74,6 +75,24 @@ const createMeeting = asyncHandler(async (req, res) => {
     const populatedMeeting = await Meeting.findById(meeting._id)
         .populate('hostId', 'fullName email role department')
         .populate('participants.userId', 'fullName email role department avatar');
+
+    // Start Vexa AI transcription bot
+    try {
+        const botResult = await startTranscriptionBot(populatedMeeting.meetingLink, 'MeetingActionTracker');
+        if (botResult.success) {
+            console.log(`Transcription bot started for meeting: ${populatedMeeting.title}`);
+            // Update meeting with bot info
+            await Meeting.findByIdAndUpdate(meeting._id, { 
+                transcriptionBotId: botResult.botId,
+                transcriptionBotStarted: true 
+            });
+        } else {
+            console.error('Failed to start transcription bot:', botResult.error);
+        }
+    } catch (botError) {
+        console.error('Error starting transcription bot:', botError);
+        // Don't fail meeting creation if bot fails
+    }
 
     // Send email invitations if participants exist
     if (participantIds && participantIds.length > 0) {
@@ -360,12 +379,71 @@ const endMeeting = asyncHandler(async (req, res) => {
         });
     }
 
+    // Get transcription before ending the meeting
+    let transcriptionData = [];
+    if (meeting.transcriptionBotStarted && meeting.meetingLink) {
+        try {
+            const transcriptionResult = await getTranscription(meeting.meetingLink);
+            if (transcriptionResult.success && transcriptionResult.transcription) {
+                // Extract name and text fields from the transcription response
+                if (Array.isArray(transcriptionResult.transcription)) {
+                    // If response is an array of transcription segments
+                    transcriptionData.push(...transcriptionResult.transcription.map(segment => ({
+                        name: segment.name || segment.speaker || 'Unknown',
+                        text: segment.text || segment.content || ''
+                    })));
+                } else if (transcriptionResult.transcription.segments) {
+                    // If response has segments property
+                    transcriptionData.push(...transcriptionResult.transcription.segments.map(segment => ({
+                        name: segment.name || segment.speaker || 'Unknown',
+                        text: segment.text || segment.content || ''
+                    })));
+                } else if (transcriptionResult.transcription.name && transcriptionResult.transcription.text) {
+                    // If response is a single object with name and text
+                    transcriptionData.push({
+                        name: transcriptionResult.transcription.name,
+                        text: transcriptionResult.transcription.text
+                    });
+                }
+                console.log(`Transcription retrieved for meeting: ${meeting.title}`);
+            }
+        } catch (transcriptionError) {
+            console.error('Error retrieving transcription:', transcriptionError);
+        }
+    }
+
+    // End the meeting
     await meeting.endMeeting(notes);
+
+    // Update meeting with transcription data if available
+    if (transcriptionData.length > 0) {
+        await Meeting.findByIdAndUpdate(meetingId, {
+            meetingTranscription: transcriptionData
+        });
+    }
+
+    // Clean up transcription bot
+    if (meeting.transcriptionBotStarted && meeting.meetingLink) {
+        try {
+            const deleteResult = await deleteTranscriptionBot(meeting.meetingLink);
+            if (deleteResult.success) {
+                console.log(`Transcription bot cleaned up for meeting: ${meeting.title}`);
+                await Meeting.findByIdAndUpdate(meetingId, {
+                    transcriptionBotStarted: false
+                });
+            }
+        } catch (botError) {
+            console.error('Error cleaning up transcription bot:', botError);
+        }
+    }
 
     return res.status(200).json({
         success: true,
         message: "Meeting ended successfully",
-        data: meeting
+        data: {
+            ...meeting.toObject(),
+            transcription: transcriptionData.length > 0 ? "Transcription retrieved and stored" : "No transcription available"
+        }
     });
 });
 
@@ -430,6 +508,110 @@ const updateParticipantStatus = asyncHandler(async (req, res) => {
     });
 });
 
+// Get meeting transcription
+const getMeetingTranscription = asyncHandler(async (req, res) => {
+    const { meetingId } = req.params;
+
+    // Search by meetingId field (Google Meet ID) instead of MongoDB ObjectId
+    const meeting = await Meeting.findOne({ meetingId: meetingId });
+
+    if (!meeting) {
+        return res.status(404).json({
+            success: false,
+            message: "Meeting not found"
+        });
+    }
+
+    // Check if user has access to this meeting
+    const hasAccess = meeting.hostId.toString() === req.user._id.toString() ||
+                     meeting.participants.some(p => p.userId.toString() === req.user._id.toString());
+
+    if (!hasAccess) {
+        return res.status(403).json({
+            success: false,
+            message: "You don't have access to this meeting"
+        });
+    }
+
+    // If meeting already has stored transcription, return it
+    if (meeting.meetingTranscription && meeting.meetingTranscription.length > 0) {
+        return res.status(200).json({
+            success: true,
+            message: "Transcription retrieved successfully",
+            data: {
+                meetingId: meeting.meetingId,
+                mongoId: meeting._id,
+                title: meeting.title,
+                transcription: meeting.meetingTranscription,
+                retrievedAt: meeting.updatedAt
+            }
+        });
+    }
+
+    // Try to get transcription from Vexa API
+    if (meeting.meetingLink) {
+        try {
+            const transcriptionResult = await getTranscription(meeting.meetingLink);
+            if (transcriptionResult.success && transcriptionResult.transcription) {
+                // Extract name and text fields from the transcription response
+                const transcriptionData = [];
+                
+                // Handle different response formats from Vexa API
+                if (Array.isArray(transcriptionResult.transcription)) {
+                    // If response is an array of transcription segments
+                    transcriptionData.push(...transcriptionResult.transcription.map(segment => ({
+                        name: segment.name || segment.speaker || 'Unknown',
+                        text: segment.text || segment.content || ''
+                    })));
+                } else if (transcriptionResult.transcription.segments) {
+                    // If response has segments property
+                    transcriptionData.push(...transcriptionResult.transcription.segments.map(segment => ({
+                        name: segment.name || segment.speaker || 'Unknown',
+                        text: segment.text || segment.content || ''
+                    })));
+                } else if (transcriptionResult.transcription.name && transcriptionResult.transcription.text) {
+                    // If response is a single object with name and text
+                    transcriptionData.push({
+                        name: transcriptionResult.transcription.name,
+                        text: transcriptionResult.transcription.text
+                    });
+                }
+
+                // Store transcription in meeting document
+                if (transcriptionData.length > 0) {
+                    await Meeting.findByIdAndUpdate(meeting._id, {
+                        meetingTranscription: transcriptionData
+                    });
+
+                    return res.status(200).json({
+                        success: true,
+                        message: "Transcription retrieved and stored successfully",
+                        data: {
+                            meetingId: meeting.meetingId,
+                            mongoId: meeting._id,
+                            title: meeting.title,
+                            transcription: transcriptionData,
+                            retrievedAt: new Date()
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error retrieving transcription:', error);
+            return res.status(500).json({
+                success: false,
+                message: "Error retrieving transcription from Vexa API",
+                error: error.message
+            });
+        }
+    }
+
+    return res.status(404).json({
+        success: false,
+        message: "No transcription available for this meeting"
+    });
+});
+
 export {
     createMeeting,
     getMeetings,
@@ -439,5 +621,6 @@ export {
     startMeeting,
     endMeeting,
     getAvailableStaff,
-    updateParticipantStatus
+    updateParticipantStatus,
+    getMeetingTranscription
 };

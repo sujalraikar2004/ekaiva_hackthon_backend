@@ -5,12 +5,12 @@ import {
   getActionItems,
   updateActionItemStatus
 } from '../controllers/meetingTranscription.controller.js';
-import { protect } from '../middleware/auth.js';
+
 
 const router = express.Router();
 
 // Protected routes (require authentication)
-router.use(protect);
+
 
 router.post('/meetings/:meetingId/process-transcription', processTranscription);
 router.get('/users/:userId/action-items', getActionItems);

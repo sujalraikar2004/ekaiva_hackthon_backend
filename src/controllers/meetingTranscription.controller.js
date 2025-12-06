@@ -1,6 +1,6 @@
 // src/controllers/meetingTranscription.controller.js
-import Meeting from '../models/Meeting.js';
-import User from '../models/User.js';
+import { Meeting } from '../models/meeting.model.js';
+import { User } from '../models/user.model.js';
 import { processMeetingTranscription } from '../utils/llmService.js';
 
 export const processTranscription = async (req, res, next) => {

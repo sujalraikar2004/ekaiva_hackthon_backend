@@ -15,10 +15,10 @@ import { verifyJWT } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
-// All meeting routes require authentication
+
 router.use(verifyJWT);
 
-// Meeting CRUD operations
+
 router.route("/").post(createMeeting).get(getMeetings);
 
 router.route("/:meetingId")

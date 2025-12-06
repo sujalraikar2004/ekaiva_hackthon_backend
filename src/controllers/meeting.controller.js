@@ -4,7 +4,7 @@ import asyncHandler from "../utils/asynvHandler.js";
 import { sendMeetingInvitation, sendMeetingCancellation } from "../utils/emailService.js";
 import { startTranscriptionBot, deleteTranscriptionBot, getTranscription } from "../utils/vexaService.js";
 
-// Create a new meeting
+
 const createMeeting = asyncHandler(async (req, res) => {
     const {
         title,
@@ -18,7 +18,7 @@ const createMeeting = asyncHandler(async (req, res) => {
         recurringPattern
     } = req.body;
 
-    // Validation
+    
     if (!title || !description || !meetingLink || !scheduledDateTime || !duration) {
         return res.status(400).json({
             success: false,
@@ -26,7 +26,7 @@ const createMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Validate that user is a manager
+  
     if (req.user.role !== 'manager') {
         return res.status(403).json({
             success: false,
@@ -34,7 +34,7 @@ const createMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Validate participants are staff members under this manager
+
     if (participantIds && participantIds.length > 0) {
         const participants = await User.find({
             _id: { $in: participantIds },
@@ -51,7 +51,7 @@ const createMeeting = asyncHandler(async (req, res) => {
         }
     }
 
-    // Create meeting data
+ 
     const meetingData = {
         title: title.trim(),
         description: description.trim(),
@@ -68,10 +68,10 @@ const createMeeting = asyncHandler(async (req, res) => {
         meetingData.recurringPattern = recurringPattern;
     }
 
-    // Create meeting
+ 
     const meeting = await Meeting.create(meetingData);
 
-    // Populate meeting with participant details
+ 
     const populatedMeeting = await Meeting.findById(meeting._id)
         .populate('hostId', 'fullName email role department')
         .populate('participants.userId', 'fullName email role department avatar');
@@ -91,20 +91,20 @@ const createMeeting = asyncHandler(async (req, res) => {
         }
     } catch (botError) {
         console.error('Error starting transcription bot:', botError);
-        // Don't fail meeting creation if bot fails
+       
     }
 
-    // Send email invitations if participants exist
+  
     if (participantIds && participantIds.length > 0) {
         try {
             const participants = await User.find({ _id: { $in: participantIds } });
             await sendMeetingInvitation(populatedMeeting, participants, req.user);
             
-            // Mark email as sent
+          
             await Meeting.findByIdAndUpdate(meeting._id, { emailSent: true });
         } catch (emailError) {
             console.error('Failed to send meeting invitations:', emailError);
-            // Don't fail the meeting creation if email fails
+         
         }
     }
 
@@ -121,14 +121,14 @@ const getMeetings = asyncHandler(async (req, res) => {
     let meetings;
 
     if (req.user.role === 'manager') {
-        // Managers see meetings they host
+  
         meetings = await Meeting.findByHost(req.user._id, status);
     } else {
-        // Staff see meetings they're invited to
+    
         meetings = await Meeting.findByParticipant(req.user._id, status);
     }
 
-    // Filter for upcoming meetings if requested
+   
     if (upcoming === 'true') {
         const now = new Date();
         meetings = meetings.filter(meeting => 
@@ -144,7 +144,7 @@ const getMeetings = asyncHandler(async (req, res) => {
     });
 });
 
-// Get specific meeting by ID
+
 const getMeetingById = asyncHandler(async (req, res) => {
     const { meetingId } = req.params;
 
@@ -159,7 +159,7 @@ const getMeetingById = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if user has access to this meeting
+   
     const hasAccess = meeting.hostId._id.toString() === req.user._id.toString() ||
                      meeting.participants.some(p => p.userId._id.toString() === req.user._id.toString());
 
@@ -177,7 +177,7 @@ const getMeetingById = asyncHandler(async (req, res) => {
     });
 });
 
-// Update meeting (only host can update)
+
 const updateMeeting = asyncHandler(async (req, res) => {
     const { meetingId } = req.params;
     const {
@@ -199,7 +199,7 @@ const updateMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if user is the host
+  
     if (meeting.hostId.toString() !== req.user._id.toString()) {
         return res.status(403).json({
             success: false,
@@ -207,7 +207,7 @@ const updateMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if meeting can be updated (not completed or cancelled)
+
     if (meeting.status === 'completed' || meeting.status === 'cancelled') {
         return res.status(400).json({
             success: false,
@@ -215,7 +215,7 @@ const updateMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Update fields
+   
     const updateData = {};
     if (title) updateData.title = title.trim();
     if (description) updateData.description = description.trim();
@@ -224,9 +224,9 @@ const updateMeeting = asyncHandler(async (req, res) => {
     if (duration) updateData.duration = parseInt(duration);
     if (timezone) updateData.timezone = timezone;
 
-    // Handle participant updates
+  
     if (participantIds) {
-        // Validate participants
+      
         const participants = await User.find({
             _id: { $in: participantIds },
             role: 'staff',
@@ -258,7 +258,7 @@ const updateMeeting = asyncHandler(async (req, res) => {
     });
 });
 
-// Cancel meeting
+
 const cancelMeeting = asyncHandler(async (req, res) => {
     const { meetingId } = req.params;
     const { reason } = req.body;
@@ -274,7 +274,7 @@ const cancelMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if user is the host
+    
     if (meeting.hostId._id.toString() !== req.user._id.toString()) {
         return res.status(403).json({
             success: false,
@@ -282,7 +282,7 @@ const cancelMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if meeting can be cancelled
+    
     if (meeting.status === 'completed' || meeting.status === 'cancelled') {
         return res.status(400).json({
             success: false,
@@ -290,11 +290,11 @@ const cancelMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Update meeting status
+    
     meeting.status = 'cancelled';
     await meeting.save();
 
-    // Send cancellation emails
+    
     if (meeting.participants.length > 0) {
         try {
             const participants = meeting.participants.map(p => p.userId);
@@ -311,7 +311,7 @@ const cancelMeeting = asyncHandler(async (req, res) => {
     });
 });
 
-// Start meeting
+
 const startMeeting = asyncHandler(async (req, res) => {
     const { meetingId } = req.params;
 
@@ -324,7 +324,7 @@ const startMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if user is the host
+
     if (meeting.hostId.toString() !== req.user._id.toString()) {
         return res.status(403).json({
             success: false,
@@ -332,7 +332,7 @@ const startMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if meeting is scheduled
+ 
     if (meeting.status !== 'scheduled') {
         return res.status(400).json({
             success: false,
@@ -349,7 +349,7 @@ const startMeeting = asyncHandler(async (req, res) => {
     });
 });
 
-// End meeting
+
 const endMeeting = asyncHandler(async (req, res) => {
     const { meetingId } = req.params;
     const { notes } = req.body;
@@ -363,7 +363,7 @@ const endMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if user is the host
+
     if (meeting.hostId.toString() !== req.user._id.toString()) {
         return res.status(403).json({
             success: false,
@@ -371,7 +371,6 @@ const endMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if meeting is ongoing
     if (meeting.status !== 'ongoing') {
         return res.status(400).json({
             success: false,
@@ -379,15 +378,15 @@ const endMeeting = asyncHandler(async (req, res) => {
         });
     }
 
-    // Get transcription before ending the meeting
+ 
     let transcriptionData = [];
     if (meeting.transcriptionBotStarted && meeting.meetingLink) {
         try {
             const transcriptionResult = await getTranscription(meeting.meetingLink);
             if (transcriptionResult.success && transcriptionResult.transcription) {
-                // Extract name and text fields from the transcription response
+              
                 if (Array.isArray(transcriptionResult.transcription)) {
-                    // If response is an array of transcription segments
+                
                     transcriptionData.push(...transcriptionResult.transcription.map(segment => ({
                         name: segment.name || segment.speaker || 'Unknown',
                         text: segment.text || segment.content || ''
@@ -399,7 +398,7 @@ const endMeeting = asyncHandler(async (req, res) => {
                         text: segment.text || segment.content || ''
                     })));
                 } else if (transcriptionResult.transcription.name && transcriptionResult.transcription.text) {
-                    // If response is a single object with name and text
+                
                     transcriptionData.push({
                         name: transcriptionResult.transcription.name,
                         text: transcriptionResult.transcription.text
@@ -412,17 +411,16 @@ const endMeeting = asyncHandler(async (req, res) => {
         }
     }
 
-    // End the meeting
     await meeting.endMeeting(notes);
 
-    // Update meeting with transcription data if available
+
     if (transcriptionData.length > 0) {
         await Meeting.findByIdAndUpdate(meetingId, {
             meetingTranscription: transcriptionData
         });
     }
 
-    // Clean up transcription bot
+    
     if (meeting.transcriptionBotStarted && meeting.meetingLink) {
         try {
             const deleteResult = await deleteTranscriptionBot(meeting.meetingLink);
@@ -447,9 +445,9 @@ const endMeeting = asyncHandler(async (req, res) => {
     });
 });
 
-// Get staff members for meeting invitation
+
 const getAvailableStaff = asyncHandler(async (req, res) => {
-    // Only managers can access this
+
     if (req.user.role !== 'manager') {
         return res.status(403).json({
             success: false,
@@ -466,7 +464,7 @@ const getAvailableStaff = asyncHandler(async (req, res) => {
     });
 });
 
-// Update participant status (for staff to accept/decline)
+
 const updateParticipantStatus = asyncHandler(async (req, res) => {
     const { meetingId } = req.params;
     const { status } = req.body;
@@ -487,7 +485,7 @@ const updateParticipantStatus = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if user is a participant
+  
     const participant = meeting.participants.find(p => 
         p.userId.toString() === req.user._id.toString()
     );
@@ -508,11 +506,11 @@ const updateParticipantStatus = asyncHandler(async (req, res) => {
     });
 });
 
-// Get meeting transcription
+
 const getMeetingTranscription = asyncHandler(async (req, res) => {
     const { meetingId } = req.params;
 
-    // Search by meetingId field (Google Meet ID) instead of MongoDB ObjectId
+   
     const meeting = await Meeting.findOne({ meetingId: meetingId });
 
     if (!meeting) {
@@ -522,7 +520,7 @@ const getMeetingTranscription = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if user has access to this meeting
+    g
     const hasAccess = meeting.hostId.toString() === req.user._id.toString() ||
                      meeting.participants.some(p => p.userId.toString() === req.user._id.toString());
 
@@ -533,7 +531,7 @@ const getMeetingTranscription = asyncHandler(async (req, res) => {
         });
     }
 
-    // If meeting already has stored transcription, return it
+    
     if (meeting.meetingTranscription && meeting.meetingTranscription.length > 0) {
         return res.status(200).json({
             success: true,
@@ -553,31 +551,30 @@ const getMeetingTranscription = asyncHandler(async (req, res) => {
         try {
             const transcriptionResult = await getTranscription(meeting.meetingLink);
             if (transcriptionResult.success && transcriptionResult.transcription) {
-                // Extract name and text fields from the transcription response
+         
                 const transcriptionData = [];
                 
-                // Handle different response formats from Vexa API
+            
                 if (Array.isArray(transcriptionResult.transcription)) {
-                    // If response is an array of transcription segments
+             
                     transcriptionData.push(...transcriptionResult.transcription.map(segment => ({
                         name: segment.name || segment.speaker || 'Unknown',
                         text: segment.text || segment.content || ''
                     })));
                 } else if (transcriptionResult.transcription.segments) {
-                    // If response has segments property
+              
                     transcriptionData.push(...transcriptionResult.transcription.segments.map(segment => ({
                         name: segment.name || segment.speaker || 'Unknown',
                         text: segment.text || segment.content || ''
                     })));
                 } else if (transcriptionResult.transcription.name && transcriptionResult.transcription.text) {
-                    // If response is a single object with name and text
+         
                     transcriptionData.push({
                         name: transcriptionResult.transcription.name,
                         text: transcriptionResult.transcription.text
                     });
                 }
 
-                // Store transcription in meeting document
                 if (transcriptionData.length > 0) {
                     await Meeting.findByIdAndUpdate(meeting._id, {
                         meetingTranscription: transcriptionData

@@ -86,7 +86,7 @@ const userSchema = new mongoose.Schema({
     teamMembers: [{
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
-    }], // Only for managers - their team members
+    }],
     timezone: {
         type: String,
         default: 'UTC'
@@ -95,7 +95,7 @@ const userSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Hash password before saving
+
 userSchema.pre("save", async function(next) {
     if (!this.isModified("password")) return next();
     
@@ -108,12 +108,12 @@ userSchema.pre("save", async function(next) {
     }
 });
 
-// Compare password method
+
 userSchema.methods.isPasswordCorrect = async function(password) {
     return await bcrypt.compare(password, this.password);
 };
 
-// Generate access token
+
 userSchema.methods.generateAccessToken = function() {
     return jwt.sign(
         {
@@ -130,7 +130,7 @@ userSchema.methods.generateAccessToken = function() {
     );
 };
 
-// Generate refresh token
+
 userSchema.methods.generateRefreshToken = function() {
     return jwt.sign(
         {
@@ -143,7 +143,7 @@ userSchema.methods.generateRefreshToken = function() {
     );
 };
 
-// Generate both tokens
+
 userSchema.methods.generateTokens = function() {
     const accessToken = this.generateAccessToken();
     const refreshToken = this.generateRefreshToken();
@@ -151,13 +151,13 @@ userSchema.methods.generateTokens = function() {
     return { accessToken, refreshToken };
 };
 
-// Update last login
+
 userSchema.methods.updateLastLogin = function() {
     this.lastLogin = new Date();
     return this.save({ validateBeforeSave: false });
 };
 
-// Remove sensitive data when converting to JSON
+
 userSchema.methods.toJSON = function() {
     const userObject = this.toObject();
     delete userObject.password;
@@ -165,7 +165,7 @@ userSchema.methods.toJSON = function() {
     return userObject;
 };
 
-// Static method to find user by email or username
+
 userSchema.statics.findByEmailOrUsername = function(identifier) {
     return this.findOne({
         $or: [
@@ -175,12 +175,12 @@ userSchema.statics.findByEmailOrUsername = function(identifier) {
     });
 };
 
-// Static method to find managers
+
 userSchema.statics.findManagers = function() {
     return this.find({ role: 'manager', isActive: true }).select('-password -refreshToken');
 };
 
-// Static method to find staff by manager
+
 userSchema.statics.findStaffByManager = function(managerId) {
     return this.find({ 
         role: 'staff', 
@@ -189,7 +189,7 @@ userSchema.statics.findStaffByManager = function(managerId) {
     }).select('-password -refreshToken');
 };
 
-// Method to check if user can manage another user
+
 userSchema.methods.canManage = function(userId) {
     if (this.role !== 'manager') return false;
     return this.teamMembers.includes(userId);

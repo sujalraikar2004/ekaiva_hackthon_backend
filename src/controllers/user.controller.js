@@ -3,7 +3,7 @@ import asyncHandler from "../utils/asynvHandler.js";
 import { uploadonCloudinary } from "../utils/cloudinary.js";
 import jwt from "jsonwebtoken";
 
-// Generate access and refresh tokens
+
 const generateAccessAndRefreshTokens = async (userId) => {
     try {
         const user = await User.findById(userId);
@@ -18,7 +18,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
     }
 };
 
-// Register user
+
 const registerUser = asyncHandler(async (req, res) => {
     const { 
         username, 
@@ -33,7 +33,7 @@ const registerUser = asyncHandler(async (req, res) => {
         timezone 
     } = req.body;
 
-    // Validation for required fields
+ 
     const requiredFields = [username, email, password, fullName, role, department, jobTitle, employeeId];
     if (requiredFields.some(field => field?.trim() === "")) {
         return res.status(400).json({
@@ -42,7 +42,6 @@ const registerUser = asyncHandler(async (req, res) => {
         });
     }
 
-    // Validate role
     if (!["manager", "staff"].includes(role)) {
         return res.status(400).json({
             success: false,
@@ -50,7 +49,7 @@ const registerUser = asyncHandler(async (req, res) => {
         });
     }
 
-    // If role is staff, managerId is required
+ 
     if (role === "staff" && !managerId) {
         return res.status(400).json({
             success: false,
@@ -58,7 +57,7 @@ const registerUser = asyncHandler(async (req, res) => {
         });
     }
 
-    // If role is staff, validate that managerId exists and is a manager
+  
     if (role === "staff" && managerId) {
         const manager = await User.findById(managerId);
         if (!manager) {
@@ -75,7 +74,7 @@ const registerUser = asyncHandler(async (req, res) => {
         }
     }
 
-    // Check if user already exists (email, username, or employeeId)
+ 
     const existedUser = await User.findOne({
         $or: [
             { email: email.toLowerCase() },
@@ -91,7 +90,7 @@ const registerUser = asyncHandler(async (req, res) => {
         });
     }
 
-    // Handle avatar upload (optional)
+  
     let avatarUrl = null;
     if (req.file) {
         try {
@@ -112,7 +111,7 @@ const registerUser = asyncHandler(async (req, res) => {
         }
     }
 
-    // Create user object
+   
     const userData = {
         username: username.toLowerCase(),
         email: email.toLowerCase(),
@@ -125,20 +124,20 @@ const registerUser = asyncHandler(async (req, res) => {
         timezone: timezone || 'UTC'
     };
 
-    // Add avatar only if uploaded
+  
     if (avatarUrl) {
         userData.avatar = avatarUrl;
     }
 
-    // Add managerId only for staff
+
     if (role === "staff" && managerId) {
         userData.managerId = managerId;
     }
 
-    // Create user
+r
     const user = await User.create(userData);
 
-    // If user is staff, add them to manager's team
+
     if (role === "staff" && managerId) {
         await User.findByIdAndUpdate(
             managerId,
@@ -147,7 +146,7 @@ const registerUser = asyncHandler(async (req, res) => {
         );
     }
 
-    // Remove password and refresh token from response
+
     const createdUser = await User.findById(user._id)
         .select("-password -refreshToken")
         .populate('managerId', 'fullName email role department');
@@ -166,11 +165,11 @@ const registerUser = asyncHandler(async (req, res) => {
     });
 });
 
-// Login user
+
 const loginUser = asyncHandler(async (req, res) => {
     const { email, username, password } = req.body;
 
-    // Validation
+
     if (!(username || email)) {
         return res.status(400).json({
             success: false,
@@ -185,7 +184,7 @@ const loginUser = asyncHandler(async (req, res) => {
         });
     }
 
-    // Find user
+
     const user = await User.findByEmailOrUsername(username || email);
     if (!user) {
         return res.status(404).json({
@@ -194,7 +193,7 @@ const loginUser = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if user is active
+
     if (!user.isActive) {
         return res.status(403).json({
             success: false,
@@ -202,7 +201,7 @@ const loginUser = asyncHandler(async (req, res) => {
         });
     }
 
-    // Validate password
+
     const isPasswordValid = await user.isPasswordCorrect(password);
     if (!isPasswordValid) {
         return res.status(401).json({
@@ -211,16 +210,16 @@ const loginUser = asyncHandler(async (req, res) => {
         });
     }
 
-    // Generate tokens
+
     const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id);
 
-    // Update last login
+
     await user.updateLastLogin();
 
-    // Get user without sensitive data
+ 
     const loggedInUser = await User.findById(user._id).select("-password -refreshToken");
 
-    // Cookie options
+
     const options = {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
@@ -243,7 +242,6 @@ const loginUser = asyncHandler(async (req, res) => {
         });
 });
 
-// Logout user
 const logoutUser = asyncHandler(async (req, res) => {
     await User.findByIdAndUpdate(
         req.user._id,
@@ -273,7 +271,6 @@ const logoutUser = asyncHandler(async (req, res) => {
         });
 });
 
-// Refresh access token
 const refreshAccessToken = asyncHandler(async (req, res) => {
     const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken;
 
@@ -334,7 +331,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     }
 });
 
-// Get current user
+
 const getCurrentUser = asyncHandler(async (req, res) => {
     return res.status(200).json({
         success: true,
@@ -343,7 +340,7 @@ const getCurrentUser = asyncHandler(async (req, res) => {
     });
 });
 
-// Change password
+
 const changeCurrentPassword = asyncHandler(async (req, res) => {
     const { oldPassword, newPassword } = req.body;
 
@@ -380,7 +377,7 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     });
 });
 
-// Update account details
+
 const updateAccountDetails = asyncHandler(async (req, res) => {
     const { username, email } = req.body;
 
@@ -395,7 +392,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     if (username) updateFields.username = username.toLowerCase();
     if (email) updateFields.email = email.toLowerCase();
 
-    // Check if username or email already exists (excluding current user)
+ 
     if (username || email) {
         const existingUser = await User.findOne({
             $and: [
@@ -430,7 +427,7 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     });
 });
 
-// Update user avatar
+
 const updateUserAvatar = asyncHandler(async (req, res) => {
     if (!req.file) {
         return res.status(400).json({
@@ -468,7 +465,7 @@ const updateUserAvatar = asyncHandler(async (req, res) => {
     }
 });
 
-// Deactivate account
+
 const deactivateAccount = asyncHandler(async (req, res) => {
     await User.findByIdAndUpdate(
         req.user._id,

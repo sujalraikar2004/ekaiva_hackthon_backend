@@ -27,9 +27,11 @@ app.use(cookieParser())
 // Import routes
 import userRouter from './routes/user.routes.js'
 import meetingRouter from './routes/meeting.routes.js'
+import meetingTranscriptionRoutes from './routes/meetingTranscription.routes.js';
 
 // Routes declaration
 app.use("/api/v1/users", userRouter)
+app.use('/api', meetingTranscriptionRoutes);
 app.use("/api/v1/meetings", meetingRouter)
 
 // Health check endpoint

@@ -41,7 +41,7 @@ const meetingSchema = new mongoose.Schema({
         required: [true, "Meeting link is required"],
         trim: true,
         validate: {
-            validator: function(v) {
+            validator: function (v) {
                 return /^https?:\/\/.+/.test(v);
             },
             message: "Please provide a valid meeting link"
@@ -56,7 +56,7 @@ const meetingSchema = new mongoose.Schema({
         type: Date,
         required: [true, "Meeting date and time is required"],
         validate: {
-            validator: function(v) {
+            validator: function (v) {
                 return v > new Date();
             },
             message: "Meeting must be scheduled for a future date and time"
@@ -157,15 +157,14 @@ const meetingSchema = new mongoose.Schema({
 meetingSchema.index({ hostId: 1, scheduledDateTime: 1 });
 meetingSchema.index({ 'participants.userId': 1 });
 meetingSchema.index({ status: 1, scheduledDateTime: 1 });
-meetingSchema.index({ meetingId: 1 });
 
 // Virtual for meeting end time
-meetingSchema.virtual('scheduledEndTime').get(function() {
+meetingSchema.virtual('scheduledEndTime').get(function () {
     return new Date(this.scheduledDateTime.getTime() + (this.duration * 60000));
 });
 
 // Method to add participant
-meetingSchema.methods.addParticipant = function(userId) {
+meetingSchema.methods.addParticipant = function (userId) {
     const existingParticipant = this.participants.find(p => p.userId.toString() === userId.toString());
     if (!existingParticipant) {
         this.participants.push({ userId });
@@ -174,13 +173,13 @@ meetingSchema.methods.addParticipant = function(userId) {
 };
 
 // Method to remove participant
-meetingSchema.methods.removeParticipant = function(userId) {
+meetingSchema.methods.removeParticipant = function (userId) {
     this.participants = this.participants.filter(p => p.userId.toString() !== userId.toString());
     return this.save();
 };
 
 // Method to update participant status
-meetingSchema.methods.updateParticipantStatus = function(userId, status, timestamp = new Date()) {
+meetingSchema.methods.updateParticipantStatus = function (userId, status, timestamp = new Date()) {
     const participant = this.participants.find(p => p.userId.toString() === userId.toString());
     if (participant) {
         participant.status = status;
@@ -194,14 +193,14 @@ meetingSchema.methods.updateParticipantStatus = function(userId, status, timesta
 };
 
 // Method to start meeting
-meetingSchema.methods.startMeeting = function() {
+meetingSchema.methods.startMeeting = function () {
     this.status = 'ongoing';
     this.actualStartTime = new Date();
     return this.save();
 };
 
 // Method to end meeting
-meetingSchema.methods.endMeeting = function(notes = '') {
+meetingSchema.methods.endMeeting = function (notes = '') {
     this.status = 'completed';
     this.actualEndTime = new Date();
     if (notes) {
@@ -211,7 +210,7 @@ meetingSchema.methods.endMeeting = function(notes = '') {
 };
 
 // Static method to find meetings by host
-meetingSchema.statics.findByHost = function(hostId, status = null) {
+meetingSchema.statics.findByHost = function (hostId, status = null) {
     const query = { hostId };
     if (status) {
         query.status = status;
@@ -223,7 +222,7 @@ meetingSchema.statics.findByHost = function(hostId, status = null) {
 };
 
 // Static method to find meetings by participant
-meetingSchema.statics.findByParticipant = function(userId, status = null) {
+meetingSchema.statics.findByParticipant = function (userId, status = null) {
     const query = { 'participants.userId': userId };
     if (status) {
         query.status = status;
@@ -235,19 +234,19 @@ meetingSchema.statics.findByParticipant = function(userId, status = null) {
 };
 
 // Static method to find upcoming meetings
-meetingSchema.statics.findUpcoming = function(userId = null) {
+meetingSchema.statics.findUpcoming = function (userId = null) {
     const query = {
         scheduledDateTime: { $gte: new Date() },
         status: { $in: ['scheduled', 'ongoing'] }
     };
-    
+
     if (userId) {
         query.$or = [
             { hostId: userId },
             { 'participants.userId': userId }
         ];
     }
-    
+
     return this.find(query)
         .populate('hostId', 'fullName email role department')
         .populate('participants.userId', 'fullName email role department avatar')
@@ -255,20 +254,20 @@ meetingSchema.statics.findUpcoming = function(userId = null) {
 };
 
 // Pre-save middleware to validate host is a manager
-meetingSchema.pre('save', async function(next) {
+meetingSchema.pre('save', async function (next) {
     if (this.isNew || this.isModified('hostId')) {
         const User = mongoose.model('User');
         const host = await User.findById(this.hostId);
-        
+
         if (!host) {
             return next(new Error('Invalid host ID'));
         }
-        
+
         if (host.role !== 'manager') {
             return next(new Error('Only managers can host meetings'));
         }
     }
-    
+
     // Extract meetingId from meetingLink
     if (this.isNew || this.isModified('meetingLink')) {
         if (this.meetingLink) {
@@ -282,7 +281,7 @@ meetingSchema.pre('save', async function(next) {
             }
         }
     }
-    
+
     next();
 });
 
